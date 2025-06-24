@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+  <title><%= title %></title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"/>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: #000;
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      overflow: hidden;
+    }
+    body, #player-container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: stretch;
+    }
+    #video {
+      position: absolute;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      background: #000;
+      z-index: 0;
+    }
+    /* Spinner */
+    #spinner {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 60px;
+      height: 60px;
+      margin-left: -30px;
+      margin-top: -30px;
+      border: 6px solid #222;
+      border-top: 6px solid #e50914;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      z-index: 100;
+      display: none;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
+    .player-title {
+      position: absolute;
+      top: 32px;
+      left: 0;
+      width: 100vw;
+      text-align: center;
+      font-size: 1.3rem;
+      font-weight: 500;
+      color: #fff;
+      z-index: 10;
+      text-shadow: 0 2px 8px #000;
+      pointer-events: none;
+    }
+    .center-controls {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .center-controls-inner {
+      width: 100vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
+      pointer-events: auto;
+    }
+    .seek-btn {
+      width: 64px;
+      height: 64px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: transparent;
+      color: #fff;
+      font-size: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      pointer-events: auto;
+      transition: none;
+    }
+    .seek-btn .fa {
+      font-size: 2rem;
+      margin-bottom: 2px;
+    }
+    .seek-btn span {
+      font-size: 1.1rem;
+      font-weight: 500;
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      letter-spacing: -1px;
+    }
+    .playpause-btn {
+      background: none;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-size: 4rem;
+      margin: 0 24px;
+      padding: 0;
+      cursor: pointer;
+      pointer-events: auto;
+      box-shadow: none;
+      line-height: 1;
+      transition: none;
+    }
+    .playpause-btn:focus {
+      outline: none;
+    }
+    .playpause-btn:hover {
+      background: none;
+      border: none;
+      outline: none;
+      color: #fff;
+    }
+    /* Redesigned progress bar */
+    .progress-bar-row {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 96px;
+      width: 100vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .progress-bar-container {
+      width: 90vw;
+      max-width: 700px;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      pointer-events: auto;
+      position: relative;
+      height: 32px;
+      background: transparent;
+    }
+    .progress-bar-track,
+    .progress-bar-fill,
+    .progress-bar-thumb,
+    .progress-bar-input {
+      position: static;
+    }
+    .progress-bar-track {
+      flex: 1;
+      height: 4px;
+      background: #fff;
+      border-radius: 2px;
+      z-index: 1;
+      position: relative;
+    }
+    .progress-bar-fill {
+      position: absolute;
+      left: 0;
+      top: 50%;
+      height: 4px;
+      background: #e50914;
+      border-radius: 2px 0 0 2px;
+      z-index: 2;
+      pointer-events: none;
+      transform: translateY(-50%);
+    }
+    .progress-bar-thumb {
+      position: absolute;
+      top: 50%;
+      width: 24px;
+      height: 24px;
+      background: #e50914;
+      border-radius: 50%;
+      border: 3px solid #f60f0f;
+      z-index: 3;
+      pointer-events: none;
+      transition: left 0.1s;
+      box-sizing: border-box;
+      transform: translateY(-50%);
+    }
+    .progress-bar-input {
+      flex: 1;
+      height: 32px;
+      opacity: 0;
+      z-index: 4;
+      cursor: pointer;
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+    }
+    .progress-time {
+      color: #fff;
+      font-size: 1.1rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 1px;
+      min-width: 48px;
+      text-align: right;
+      z-index: 5;
+      pointer-events: none;
+      white-space: nowrap;
+      margin-left: 12px;
+      position: static;
+      transform: none;
+    }
+    /* Bottom bar */
+    .player-bottom-bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 24px;
+      width: 100vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .bottom-bar-inner {
+      width: 92vw;
+      max-width: 900px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      pointer-events: auto;
+    }
+    .bottom-bar-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #fff;
+      background: none;
+      border: none;
+      font-size: 1.1rem;
+      gap: 0.25rem;
+      cursor: pointer;
+      pointer-events: auto;
+      min-width: 60px;
+      transition: color 0.2s;
+      outline: none;
+    }
+    .bottom-bar-btn .fa {
+      font-size: 1.5rem;
+      margin-bottom: 2px;
+    }
+    .bottom-bar-btn:focus {
+      outline: 2px solid #fff;
+    }
+    .locked .center-controls,
+    .locked .progress-bar-row,
+    .locked .player-bottom-bar,
+    .locked .player-title {
+      opacity: 0.2;
+      pointer-events: none !important;
+      user-select: none;
+    }
+    .locked .bottom-bar-btn.lock-btn {
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+    /* Responsive for mobile and auto-rotate */
+    @media (max-width: 600px) {
+      .player-title { font-size: 1rem; top: 16px; }
+      .center-controls-inner { gap: 24px; }
+      .seek-btn { width: 48px; height: 48px; font-size: 1.2rem; }
+      .playpause-btn { font-size: 2.5rem; margin: 0 12px; }
+      .progress-bar-row { bottom: 70px; }
+      .progress-bar-container { width: 97vw; max-width: 99vw; }
+      .player-bottom-bar { bottom: 10px; }
+      .bottom-bar-inner { width: 98vw; gap: 0.5rem; }
+      .bottom-bar-btn { font-size: 0.95rem; min-width: 40px; }
+      .progress-time { min-width: 36px; }
+    }
+    @media (orientation: landscape) {
+      body, #player-container {
+        flex-direction: row;
+        align-items: stretch;
+      }
+      .player-title { top: 16px; font-size: 1.1rem; }
+      .progress-bar-container, .bottom-bar-inner { max-width: 98vw; }
+    }
+    #subtitle-preview-modal { animation: fadeIn 0.2s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <div id="player-container">
+    <div id="spinner"></div>
+    <video id="video" autoplay>
+      <% if (subtitleUrl) { %>
+        <track id="subtitle-track" kind="subtitles" srclang="en" label="English" src="<%= subtitleUrl %>" default>
+      <% } %>
+    </video>
+    <div class="player-title"><%= title %></div>
+    <div class="center-controls" id="centerControls">
+      <div class="center-controls-inner">
+        <button id="seek-back" class="seek-btn" title="Back 10s">
+          <i class="fas fa-rotate-left"></i>
+          <span></span>
+        </button>
+        <button id="center-play" class="playpause-btn" title="Play/Pause">
+          <i class="fas fa-pause"></i>
+        </button>
+        <button id="seek-forward" class="seek-btn" title="Forward 10s">
+          <i class="fas fa-rotate-right"></i>
+          <span></span>
+        </button>
+      </div>
+    </div>
+    <div class="progress-bar-row">
+      <div class="progress-bar-container" id="progressBarContainer">
+        <div class="progress-bar-track"></div>
+        <div class="progress-bar-fill" id="progressFill"></div>
+        <div class="progress-bar-thumb" id="progressThumb"></div>
+        <input id="progress" type="range" min="0" max="100" value="0" class="progress-bar-input" />
+        <span class="progress-time" id="duration">0:00</span>
+      </div>
+    </div>
+    <div class="player-bottom-bar">
+      <div class="bottom-bar-inner">
+        <button class="bottom-bar-btn lock-btn" id="lockBtn" tabindex="0">
+          <i class="fas fa-lock-open" id="lockIcon"></i>
+          <span id="lockText">Lock</span>
+        </button>
+        <button class="bottom-bar-btn" id="pipBtn" tabindex="0">
+          <i class="fas fa-clone"></i>
+          <span>PiP</span>
+        </button>
+        <button class="bottom-bar-btn" id="subToggleBtn" tabindex="0">
+          <i class="fas fa-closed-captioning"></i>
+          <span>Subtitles</span>
+        </button>
+        <button class="bottom-bar-btn" id="settingsBtn" tabindex="0">
+          <i class="fas fa-cog"></i>
+          <span>Settings</span>
+        </button>
+      </div>
+    </div>
+    <div id="subtitle-display" style="position:absolute; left:0; right:0; bottom:130px; width:100vw; text-align:center; z-index:30; pointer-events:none; font-size:1.25rem; color:#fff; text-shadow:0 2px 8px #000; font-weight:500; display:none;"></div>
+  </div>
+  <!-- Subtitle selection popup -->
+  <div id="subtitle-popup" style="display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:999; align-items:center; justify-content:center;">
+    <div style="background:#181818; border-radius:12px; padding:24px 16px; max-width:95vw; max-height:80vh; overflow-y:auto; box-shadow:0 4px 32px #000; color:#fff;">
+      <h3 style="margin:0 0 16px 0; font-size:1.2rem;">Select Subtitle</h3>
+      <div id="subtitle-list"></div>
+      <button id="subtitle-popup-close" style="margin-top:18px; background:#e50914; color:#fff; border:none; border-radius:6px; padding:8px 18px; font-size:1rem; cursor:pointer;">Close</button>
+    </div>
+  </div>
+  <!-- Settings popup -->
+  <div id="settings-popup" style="display:none; position:fixed; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#181818; border-radius:12px; padding:24px 16px; max-width:95vw; max-height:80vh; overflow-y:auto; box-shadow:0 4px 32px #000; color:#fff;">
+      <h3 style="margin:0 0 16px 0; font-size:1.2rem;">Settings</h3>
+      <div style="margin-bottom:18px;">
+        <label style="font-weight:500;">Quality:</label>
+        <select id="quality-selector-popup" style="margin-left:12px; font-size:1rem; padding:4px 8px; border-radius:6px; border:none; background:#222; color:#fff;"></select>
+      </div>
+      <button id="settings-popup-close" style="background:#e50914; color:#fff; border:none; border-radius:6px; padding:8px 18px; font-size:1rem; cursor:pointer;">Close</button>
+    </div>
+  </div>
+  <script>
+    const video = document.getElementById('video');
+    const videoSrc = "<%= videoUrl %>";
+    const playPause = document.getElementById('center-play');
+    const seekBack = document.getElementById('seek-back');
+    const seekForward = document.getElementById('seek-forward');
+    const progress = document.getElementById('progress');
+    const duration = document.getElementById('duration');
+    const progressFill = document.getElementById('progressFill');
+    const progressThumb = document.getElementById('progressThumb');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const lockBtn = document.getElementById('lockBtn');
+    const lockIcon = document.getElementById('lockIcon');
+    const lockText = document.getElementById('lockText');
+    const playerContainer = document.getElementById('player-container');
+    const pipBtn = document.getElementById('pipBtn');
+    const spinner = document.getElementById('spinner');
+    const centerControls = document.getElementById('centerControls');
+    const subtitlePopup = document.getElementById('subtitle-popup');
+    const subtitleList = document.getElementById('subtitle-list');
+    const subtitlePopupClose = document.getElementById('subtitle-popup-close');
+    const settingsPopup = document.getElementById('settings-popup');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsPopupClose = document.getElementById('settings-popup-close');
+
+    // Spinner logic: only show when loading/buffering, hide when controls are visible
+    function showSpinner() {
+      spinner.style.display = 'block';
+      centerControls.style.display = 'none';
+    }
+    function hideSpinner() {
+      spinner.style.display = 'none';
+      centerControls.style.display = '';
+    }
+    showSpinner();
+    video.addEventListener('canplay', hideSpinner);
+    video.addEventListener('playing', hideSpinner);
+    video.addEventListener('waiting', showSpinner);
+    video.addEventListener('seeking', showSpinner);
+
+    // HLS setup
+    if (/\.m3u8($|\?)/i.test(videoSrc)) {
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(videoSrc);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+          video.play().catch(()=>{});
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = videoSrc;
+        video.addEventListener('loadedmetadata', () => video.play().catch(()=>{}));
+      } else {
+        alert("Your browser does not support HLS playback.");
+      }
+    } else {
+      // For direct MP4 or other supported formats
+      video.src = videoSrc;
+      video.addEventListener('loadedmetadata', () => video.play().catch(()=>{}));
+    }
+
+    // Hide default controls
+    video.controls = false;
+
+    // Play/Pause
+    playPause.addEventListener('click', () => {
+      if (video.paused) {
+        video.play();
+      } else {
+        video.pause();
+      }
+    });
+    video.addEventListener('play', () => {
+      playPause.innerHTML = '<i class="fas fa-pause"></i>';
+    });
+    video.addEventListener('pause', () => {
+      playPause.innerHTML = '<i class="fas fa-play"></i>';
+    });
+
+    // Seek back 10s
+    seekBack.addEventListener('click', () => {
+      video.currentTime = Math.max(0, video.currentTime - 10);
+    });
+
+    // Seek forward 10s
+    seekForward.addEventListener('click', () => {
+      video.currentTime = Math.min(video.duration, video.currentTime + 10);
+    });
+
+    // Progress bar update
+    function updateProgressBar() {
+      const percent = (video.currentTime / video.duration) * 100 || 0;
+      progress.value = percent;
+      // Fill bar
+      progressFill.style.width = percent + '%';
+      // Thumb
+      const containerWidth = progressBarContainer.offsetWidth;
+      const thumbWidth = progressThumb.offsetWidth;
+      const thumbLeft = (percent / 100) * containerWidth - thumbWidth / 2;
+      progressThumb.style.left = `calc(${percent}% - ${thumbWidth/2}px)`;
+      // Always show duration
+      duration.textContent = formatTime(video.duration);
+    }
+
+    video.addEventListener('timeupdate', updateProgressBar);
+    video.addEventListener('loadedmetadata', () => {
+      updateProgressBar();
+    });
+    progress.addEventListener('input', () => {
+      video.currentTime = (progress.value / 100) * video.duration;
+      updateProgressBar();
+    });
+
+    // Format time (HH:MM:SS or MM:SS)
+    function formatTime(time) {
+      if (!isFinite(time)) return '0:00';
+      const hours = Math.floor(time / 3600);
+      const minutes = Math.floor((time % 3600) / 60);
+      const seconds = Math.floor(time % 60).toString().padStart(2, '0');
+      if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds}`;
+      } else {
+        return `${minutes}:${seconds}`;
+      }
+    }
+
+    // Lock functionality
+    let locked = false;
+    lockBtn.addEventListener('click', () => {
+      locked = !locked;
+      if (locked) {
+        playerContainer.classList.add('locked');
+        lockIcon.classList.remove('fa-lock-open');
+        lockIcon.classList.add('fa-lock');
+        lockText.textContent = 'Unlock';
+      } else {
+        playerContainer.classList.remove('locked');
+        lockIcon.classList.remove('fa-lock');
+        lockIcon.classList.add('fa-lock-open');
+        lockText.textContent = 'Lock';
+      }
+    });
+
+    // Prevent interaction when locked except lock button
+    document.addEventListener('click', (e) => {
+      if (locked && !lockBtn.contains(e.target)) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (locked && !lockBtn.contains(document.activeElement)) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+
+    // Picture-in-Picture
+    pipBtn.addEventListener('click', async () => {
+      if (document.pictureInPictureElement) {
+        document.exitPictureInPicture();
+      } else if (document.pictureInPictureEnabled) {
+        try {
+          await video.requestPictureInPicture();
+        } catch (e) {
+          alert('Picture-in-Picture not supported or failed.');
+        }
+      }
+    });
+
+    // Auto-rotate for mobile
+    function handleOrientation() {
+      if (window.screen.orientation && window.screen.orientation.lock) {
+        if (window.innerWidth > window.innerHeight) {
+          window.screen.orientation.lock('landscape').catch(()=>{});
+        } else {
+          window.screen.orientation.lock('portrait').catch(()=>{});
+        }
+      }
+    }
+    window.addEventListener('resize', handleOrientation);
+    window.addEventListener('orientationchange', handleOrientation);
+    handleOrientation();
+
+    // Try to play on first user interaction if autoplay was blocked
+    let triedAutoPlay = false;
+    function tryPlayOnUserGesture() {
+      if (!triedAutoPlay && video.paused) {
+        video.play().catch(()=>{});
+        triedAutoPlay = true;
+      }
+    }
+    document.addEventListener('click', tryPlayOnUserGesture, { once: true });
+    document.addEventListener('touchstart', tryPlayOnUserGesture, { once: true });
+
+    // Replace subtitleApiUrl logic with direct subtitle list from server
+    const sonixSubtitles = <%- JSON.stringify(sonixSubtitles || []) %>;
+
+    // Helper to add and show subtitle track
+    let currentSubtitleTrack = null;
+    let currentSubtitleInfo = null; // Track info object
+
+    function addSubtitleTrack(url, label, lang, isDefault) {
+      // Remove all existing tracks
+      Array.from(video.querySelectorAll('track')).forEach(track => track.remove());
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = label;
+      track.srclang = lang;
+      track.src = url;
+      if (isDefault) track.default = true;
+      video.appendChild(track);
+      currentSubtitleTrack = track;
+      currentSubtitleInfo = { url, label, lang }; // Save info
+
+      // Load and display subtitle
+      loadAndDisplaySubtitle(url);
+
+      // When the track loads, disable all textTracks except the last one (the one just added)
+      track.addEventListener('load', () => {
+        if (video.textTracks && video.textTracks.length > 0) {
+          for (let i = 0; i < video.textTracks.length; i++) {
+            video.textTracks[i].mode = 'disabled';
+          }
+          video.textTracks[video.textTracks.length - 1].mode = 'showing';
+        }
+      });
+
+      setTimeout(() => {
+        if (video.textTracks && video.textTracks.length > 0) {
+          for (let i = 0; i < video.textTracks.length; i++) {
+            video.textTracks[i].mode = 'disabled';
+          }
+          video.textTracks[video.textTracks.length - 1].mode = 'showing';
+        }
+      }, 500);
+    }
+
+    // Subtitle display logic
+    const subtitleDisplay = document.getElementById('subtitle-display');
+
+    function showSubtitleLine(text) {
+      subtitleDisplay.textContent = text;
+      subtitleDisplay.style.display = text ? 'block' : 'none';
+    }
+
+    // Parse VTT or SRT and display lines at correct time
+    let subtitleCues = [];
+    let subtitleTimer = null;
+
+    function parseVttOrSrt(text) {
+      // Simple SRT/VTT parser for cues
+      const cues = [];
+      const regex = /(\d+\s+)?(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})[\s\S]*?(?=\n{2,}|$)/g;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const [, , start, end] = match;
+        const cueText = match[0].split('\n').slice(1).join('\n').replace(/^\d+\s*\n/, '').replace(/(\d{2}:.*-->\s*\d{2}:.*\n)/, '').trim();
+        cues.push({
+          start: toSeconds(start),
+          end: toSeconds(end),
+          text: cueText.replace(/\r/g, '').replace(/\n/g, ' ')
+        });
+      }
+      return cues;
+    }
+
+    function toSeconds(ts) {
+      const [h, m, s] = ts.replace(',', '.').split(':');
+      return parseInt(h) * 3600 + parseInt(m) * 60 + parseFloat(s);
+    }
+
+    function loadAndDisplaySubtitle(url) {
+      // Always use your proxy endpoint
+      fetch('/api/subtitles?url=' + encodeURIComponent(url))
+        .then(res => res.text())
+        .then(text => {
+          subtitleCues = parseVttOrSrt(text);
+        });
+    }
+
+    function updateSubtitleDisplay() {
+      if (!subtitleCues.length) {
+        showSubtitleLine('');
+        return;
+      }
+      const t = video.currentTime;
+      const cue = subtitleCues.find(c => t >= c.start && t <= c.end);
+      showSubtitleLine(cue ? cue.text : '');
+    }
+
+    video.addEventListener('timeupdate', updateSubtitleDisplay);
+
+    // When a subtitle is added, load and display it
+    function addSubtitleTrack(url, label, lang, isDefault) {
+      // Remove all existing tracks
+      Array.from(video.querySelectorAll('track')).forEach(track => track.remove());
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = label;
+      track.srclang = lang;
+      track.src = url;
+      if (isDefault) track.default = true;
+      video.appendChild(track);
+      currentSubtitleTrack = track;
+      currentSubtitleInfo = { url, label, lang }; // Save info
+
+      // Load and display subtitle
+      loadAndDisplaySubtitle(url);
+
+      // When the track loads, disable all textTracks except the last one (the one just added)
+      track.addEventListener('load', () => {
+        if (video.textTracks && video.textTracks.length > 0) {
+          for (let i = 0; i < video.textTracks.length; i++) {
+            video.textTracks[i].mode = 'disabled';
+          }
+          video.textTracks[video.textTracks.length - 1].mode = 'showing';
+        }
+      });
+
+      setTimeout(() => {
+        if (video.textTracks && video.textTracks.length > 0) {
+          for (let i = 0; i < video.textTracks.length; i++) {
+            video.textTracks[i].mode = 'disabled';
+          }
+          video.textTracks[video.textTracks.length - 1].mode = 'showing';
+        }
+      }, 500);
+    }
+
+    // Also update subtitle display when a new subtitle is selected
+    // (already handled by addSubtitleTrack)
+
+    // On initial load, if English subtitle exists, load and display it
+    function autoLoadEnglishSubtitle() {
+      if (!sonixSubtitles.length) return;
+      let eng = sonixSubtitles.find(sub => sub.lan === 'en' || /english/i.test(sub.lanName));
+      if (eng) {
+        addSubtitleTrack(eng.url, eng.lanName || 'English', eng.lan || 'en', true);
+      } else {
+        addSubtitleTrack(sonixSubtitles[0].url, sonixSubtitles[0].lanName, sonixSubtitles[0].lan, true);
+      }
+    }
+    video.addEventListener('loadedmetadata', autoLoadEnglishSubtitle);
+    window.addEventListener('DOMContentLoaded', autoLoadEnglishSubtitle);
+
+    // Utility to get the active subtitle info
+    function getActiveSubtitle() {
+      return currentSubtitleInfo;
+    }
+
+    // Subtitle popup logic
+    subToggleBtn.addEventListener('click', async () => {
+      subtitlePopup.style.display = 'flex';
+      subtitleList.innerHTML = '';
+      if (!sonixSubtitles.length) {
+        subtitleList.innerHTML = '<div style="padding:12px;">No subtitles found.</div>';
+        return;
+      }
+      sonixSubtitles.forEach(sub => {
+        const btn = document.createElement('button');
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.gap = '8px';
+        btn.style.background = '#222';
+        btn.style.color = '#fff';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '6px';
+        btn.style.padding = '8px 12px';
+        btn.style.margin = '4px 0';
+        btn.style.cursor = 'pointer';
+        btn.style.width = '100%';
+        btn.style.fontSize = '1rem';
+        btn.onmouseover = () => btn.style.background = '#333';
+        btn.onmouseout = () => btn.style.background = '#222';
+        btn.innerHTML = `
+          <span>${sub.lanName || sub.lan}</span>
+          ${currentSubtitleInfo && currentSubtitleInfo.url === sub.url ? '<span style="color:#e50914;font-size:0.9em;">(Active)</span>' : ''}
+        `;
+        btn.onclick = async () => {
+          subtitlePopup.style.display = 'none';
+          try {
+            // Proxy subtitle for preview
+            let res = await fetch('/api/subtitles?url=' + encodeURIComponent(sub.url));
+            if (!res.ok) throw new Error('Failed to fetch subtitle file');
+            let srtText = await res.text();
+            let preview = parseSrtPreview(srtText);
+            showSubtitlePreview(preview, () => {
+              addSubtitleTrack(sub.url, sub.lanName, sub.lan, true);
+            });
+          } catch (e) {
+            alert('Failed to preview subtitle.');
+            addSubtitleTrack(sub.url, sub.lanName, sub.lan, true);
+          }
+        };
+        subtitleList.appendChild(btn);
+      });
+    });
+
+    // Close popup
+    subtitlePopupClose.addEventListener('click', () => {
+      subtitlePopup.style.display = 'none';
+    });
+
+    // Close subtitle popup on outside click
+    window.addEventListener('click', (e) => {
+      if (subtitlePopup.style.display === 'flex' && !subtitlePopup.contains(e.target) && !document.getElementById('subToggleBtn').contains(e.target)) {
+        subtitlePopup.style.display = 'none';
+      }
+    });
+
+    // Settings popup logic
+    settingsBtn.addEventListener('click', () => {
+      populateQualitySelectorPopup();
+      syncQualitySelectorPopup(currentSourceIndex);
+      settingsPopup.style.display = 'flex';
+    });
+    settingsPopupClose.addEventListener('click', () => {
+      settingsPopup.style.display = 'none';
+    });
+    window.addEventListener('click', (e) => {
+      if (settingsPopup.style.display === 'flex' && !settingsPopup.contains(e.target) && !settingsBtn.contains(e.target)) {
+        settingsPopup.style.display = 'none';
+      }
+    });
+
+    // Assume the server provides an array of sources like:
+    // [{url: "...", label: "1080p", type: "hls"}, {url: "...", label: "720p", type: "hls"}, ...]
+    // You must pass this as videoSources from your backend
+    const videoSources = <%- JSON.stringify(videoSources) %>;
+    let currentSourceIndex = 0;
+    let hls = null;
+
+    // Only use the popup selector now
+    const qualitySelectorPopup = document.getElementById('quality-selector-popup');
+
+    // Populate the popup selector
+    function populateQualitySelectorPopup() {
+      if (!qualitySelectorPopup) return;
+      qualitySelectorPopup.innerHTML = '';
+      videoSources.forEach((src, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = src.label || `Quality ${i+1}`;
+        if (i === currentSourceIndex) opt.selected = true;
+        qualitySelectorPopup.appendChild(opt);
+      });
+    }
+
+    // Keep selector in sync
+    function syncQualitySelectorPopup(idx) {
+      if (qualitySelectorPopup) qualitySelectorPopup.value = idx;
+    }
+
+    function handleQualityChange(e) {
+      const idx = parseInt(e.target.value, 10);
+      if (idx === currentSourceIndex) return;
+      switchSource(idx);
+      syncQualitySelectorPopup(idx);
+      settingsPopup.style.display = 'none';
+    }
+    if (qualitySelectorPopup) qualitySelectorPopup.addEventListener('change', handleQualityChange);
+
+    // When opening settings, update popup selector
+    settingsBtn.addEventListener('click', () => {
+      populateQualitySelectorPopup();
+      syncQualitySelectorPopup(currentSourceIndex);
+      settingsPopup.style.display = 'flex';
+    });
+  </script>
+</body>
+</html>
