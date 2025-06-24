@@ -584,39 +584,46 @@
     let currentSubtitleInfo = null; // Track info object
 
     function addSubtitleTrack(url, label, lang, isDefault) {
-      // Remove all existing tracks
-      Array.from(video.querySelectorAll('track')).forEach(track => track.remove());
-      const track = document.createElement('track');
-      track.kind = 'subtitles';
-      track.label = label;
-      track.srclang = lang;
-      track.src = url;
-      if (isDefault) track.default = true;
-      video.appendChild(track);
-      currentSubtitleTrack = track;
-      currentSubtitleInfo = { url, label, lang }; // Save info
+      // Always use the proxy for subtitles
+      const proxiedUrl = '/api/subtitles?url=' + encodeURIComponent(url);
+      fetch(proxiedUrl)
+        .then(res => res.text())
+        .then(text => {
+          subtitleCues = parseVttOrSrt(text);
+          // Remove all existing tracks
+          Array.from(video.querySelectorAll('track')).forEach(track => track.remove());
+          const track = document.createElement('track');
+          track.kind = 'subtitles';
+          track.label = label;
+          track.srclang = lang;
+          track.src = url;
+          if (isDefault) track.default = true;
+          video.appendChild(track);
+          currentSubtitleTrack = track;
+          currentSubtitleInfo = { url, label, lang }; // Save info
 
-      // Load and display subtitle
-      loadAndDisplaySubtitle(url);
+          // Load and display subtitle
+          loadAndDisplaySubtitle(url);
 
-      // When the track loads, disable all textTracks except the last one (the one just added)
-      track.addEventListener('load', () => {
-        if (video.textTracks && video.textTracks.length > 0) {
-          for (let i = 0; i < video.textTracks.length; i++) {
-            video.textTracks[i].mode = 'disabled';
-          }
-          video.textTracks[video.textTracks.length - 1].mode = 'showing';
-        }
-      });
+          // When the track loads, disable all textTracks except the last one (the one just added)
+          track.addEventListener('load', () => {
+            if (video.textTracks && video.textTracks.length > 0) {
+              for (let i = 0; i < video.textTracks.length; i++) {
+                video.textTracks[i].mode = 'disabled';
+              }
+              video.textTracks[video.textTracks.length - 1].mode = 'showing';
+            }
+          });
 
-      setTimeout(() => {
-        if (video.textTracks && video.textTracks.length > 0) {
-          for (let i = 0; i < video.textTracks.length; i++) {
-            video.textTracks[i].mode = 'disabled';
-          }
-          video.textTracks[video.textTracks.length - 1].mode = 'showing';
-        }
-      }, 500);
+          setTimeout(() => {
+            if (video.textTracks && video.textTracks.length > 0) {
+              for (let i = 0; i < video.textTracks.length; i++) {
+                video.textTracks[i].mode = 'disabled';
+              }
+              video.textTracks[video.textTracks.length - 1].mode = 'showing';
+            }
+          }, 500);
+        });
     }
 
     // Subtitle display logic
@@ -676,39 +683,46 @@
 
     // When a subtitle is added, load and display it
     function addSubtitleTrack(url, label, lang, isDefault) {
-      // Remove all existing tracks
-      Array.from(video.querySelectorAll('track')).forEach(track => track.remove());
-      const track = document.createElement('track');
-      track.kind = 'subtitles';
-      track.label = label;
-      track.srclang = lang;
-      track.src = url;
-      if (isDefault) track.default = true;
-      video.appendChild(track);
-      currentSubtitleTrack = track;
-      currentSubtitleInfo = { url, label, lang }; // Save info
+      // Always use the proxy for subtitles
+      const proxiedUrl = '/api/subtitles?url=' + encodeURIComponent(url);
+      fetch(proxiedUrl)
+        .then(res => res.text())
+        .then(text => {
+          subtitleCues = parseVttOrSrt(text);
+          // Remove all existing tracks
+          Array.from(video.querySelectorAll('track')).forEach(track => track.remove());
+          const track = document.createElement('track');
+          track.kind = 'subtitles';
+          track.label = label;
+          track.srclang = lang;
+          track.src = url;
+          if (isDefault) track.default = true;
+          video.appendChild(track);
+          currentSubtitleTrack = track;
+          currentSubtitleInfo = { url, label, lang }; // Save info
 
-      // Load and display subtitle
-      loadAndDisplaySubtitle(url);
+          // Load and display subtitle
+          loadAndDisplaySubtitle(url);
 
-      // When the track loads, disable all textTracks except the last one (the one just added)
-      track.addEventListener('load', () => {
-        if (video.textTracks && video.textTracks.length > 0) {
-          for (let i = 0; i < video.textTracks.length; i++) {
-            video.textTracks[i].mode = 'disabled';
-          }
-          video.textTracks[video.textTracks.length - 1].mode = 'showing';
-        }
-      });
+          // When the track loads, disable all textTracks except the last one (the one just added)
+          track.addEventListener('load', () => {
+            if (video.textTracks && video.textTracks.length > 0) {
+              for (let i = 0; i < video.textTracks.length; i++) {
+                video.textTracks[i].mode = 'disabled';
+              }
+              video.textTracks[video.textTracks.length - 1].mode = 'showing';
+            }
+          });
 
-      setTimeout(() => {
-        if (video.textTracks && video.textTracks.length > 0) {
-          for (let i = 0; i < video.textTracks.length; i++) {
-            video.textTracks[i].mode = 'disabled';
-          }
-          video.textTracks[video.textTracks.length - 1].mode = 'showing';
-        }
-      }, 500);
+          setTimeout(() => {
+            if (video.textTracks && video.textTracks.length > 0) {
+              for (let i = 0; i < video.textTracks.length; i++) {
+                video.textTracks[i].mode = 'disabled';
+              }
+              video.textTracks[video.textTracks.length - 1].mode = 'showing';
+            }
+          }, 500);
+        });
     }
 
     // Also update subtitle display when a new subtitle is selected
