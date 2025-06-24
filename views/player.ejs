@@ -376,6 +376,10 @@
           <i class="fas fa-cog"></i>
           <span>Settings</span>
         </button>
+        <button class="bottom-bar-btn" id="fullscreenBtn" tabindex="0">
+          <i class="fas fa-expand"></i>
+          <span>Fullscreen</span>
+        </button>
       </div>
     </div>
     <div id="subtitle-display" style="position:absolute; left:0; right:0; bottom:130px; width:100vw; text-align:center; z-index:30; pointer-events:none; font-size:1.25rem; color:#fff; text-shadow:0 2px 8px #000; font-weight:500; display:none;"></div>
@@ -395,6 +399,12 @@
       <div style="margin-bottom:18px;">
         <label style="font-weight:500;">Quality:</label>
         <select id="quality-selector-popup" style="margin-left:12px; font-size:1rem; padding:4px 8px; border-radius:6px; border:none; background:#222; color:#fff;"></select>
+      </div>
+      <div style="margin-bottom:18px;">
+        <label style="font-weight:500;">Subtitles:</label>
+        <select id="subtitle-selector-popup" style="margin-left:12px; font-size:1rem; padding:4px 8px; border-radius:6px; border:none; background:#222; color:#fff;">
+          <option value="">Off</option>
+        </select>
       </div>
       <button id="settings-popup-close" style="background:#e50914; color:#fff; border:none; border-radius:6px; padding:8px 18px; font-size:1rem; cursor:pointer;">Close</button>
     </div>
@@ -935,6 +945,92 @@ video.addEventListener('play', () => {
 if (!video.paused) {
   showControls();
 }
+
+document.addEventListener('keydown', (e) => {
+  if (settingsPopup.style.display === 'flex') return; // Don't interfere with settings
+  if (subtitlePopup && subtitlePopup.style.display === 'flex') return;
+  if (locked) return;
+  switch (e.key.toLowerCase()) {
+    case ' ':
+    case 'k':
+      e.preventDefault();
+      if (video.paused) video.play();
+      else video.pause();
+      break;
+    case 'arrowleft':
+    case 'j':
+      e.preventDefault();
+      video.currentTime = Math.max(0, video.currentTime - 10);
+      break;
+    case 'arrowright':
+    case 'l':
+      e.preventDefault();
+      video.currentTime = Math.min(video.duration, video.currentTime + 10);
+      break;
+    case 'f':
+      e.preventDefault();
+      toggleFullscreen();
+      break;
+    case 'm':
+      e.preventDefault();
+      video.muted = !video.muted;
+      break;
+  }
+});
+
+// Fullscreen logic
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    playerContainer.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+}
+fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+// Update fullscreen icon
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) {
+    fullscreenBtn.querySelector('i').classList.remove('fa-expand');
+    fullscreenBtn.querySelector('i').classList.add('fa-compress');
+    fullscreenBtn.querySelector('span').textContent = 'Exit Fullscreen';
+  } else {
+    fullscreenBtn.querySelector('i').classList.remove('fa-compress');
+    fullscreenBtn.querySelector('i').classList.add('fa-expand');
+    fullscreenBtn.querySelector('span').textContent = 'Fullscreen';
+  }
+});
+
+// Populate subtitle selector in settings
+const subtitleSelectorPopup = document.getElementById('subtitle-selector-popup');
+function populateSubtitleSelectorPopup() {
+  if (!subtitleSelectorPopup) return;
+  subtitleSelectorPopup.innerHTML = '<option value="">Off</option>';
+  sonixSubtitles.forEach((sub, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = sub.lanName || sub.lan || `Subtitle ${i+1}`;
+    if (currentSubtitleInfo && currentSubtitleInfo.url === sub.url) opt.selected = true;
+    subtitleSelectorPopup.appendChild(opt);
+  });
+}
+settingsBtn.addEventListener('click', populateSubtitleSelectorPopup);
+
+// Handle subtitle change from settings
+subtitleSelectorPopup.addEventListener('change', (e) => {
+  if (!e.target.value) {
+    subtitleCues = [];
+    showSubtitleLine('');
+    currentSubtitleInfo = null;
+    // Remove all tracks
+    Array.from(video.querySelectorAll('track')).forEach(track => track.remove());
+    return;
+  }
+  const idx = parseInt(e.target.value, 10);
+  const sub = sonixSubtitles[idx];
+  if (sub) addSubtitleTrack(sub.url, sub.lanName, sub.lan, true);
+});
   </script>
 </body>
 </html>
