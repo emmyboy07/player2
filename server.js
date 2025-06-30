@@ -8,16 +8,56 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static('public'));
 
+const tmdbApiKey = '1e2d76e7c45818ed61645cb647981e5c';
+
+// Get IMDb ID from TMDB Movie ID
+async function getImdbIdFromTmdbMovie(tmdbId) {
+  try {
+    const tmdbUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${tmdbApiKey}`;
+    const tmdbRes = await axios.get(tmdbUrl);
+    return tmdbRes.data.imdb_id;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Get IMDb ID from TMDB TV ID
+async function getImdbIdFromTmdbTv(tmdbId) {
+  try {
+    const tmdbUrl = `https://api.themoviedb.org/3/tv/${tmdbId}/external_ids?api_key=${tmdbApiKey}`;
+    const tmdbRes = await axios.get(tmdbUrl);
+    return tmdbRes.data.imdb_id;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Get TV Show/Episode Title
+async function getTvTitle(seriesId, seasonNumber, episodeNumber) {
+  try {
+    const showRes = await axios.get(`https://api.themoviedb.org/3/tv/${seriesId}?api_key=${tmdbApiKey}&language=en-US`);
+    if (seasonNumber && episodeNumber) {
+      const epRes = await axios.get(`https://api.themoviedb.org/3/tv/${seriesId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${tmdbApiKey}&language=en-US`);
+      return `${showRes.data.name || 'Series'} - S${seasonNumber}E${episodeNumber}: ${epRes.data.name || 'Episode'}`;
+    }
+    return showRes.data.name || 'Untitled';
+  } catch (e) {
+    return 'Untitled';
+  }
+}
+
 app.get('/watch', async (req, res) => {
   const { type, id } = req.query;
   let imdbId = null, seasonNumber = null, episodeNumber = null, title = 'Untitled';
 
-  // Log incoming request
   console.log(`[WATCH] Request: type=${type}, id=${id}`);
 
   try {
-    let sonixRes, sonixStreams = [];
-    let seriesId, seasonNumber, episodeNumber;
+    let madplayRes, madplayStreams = [];
+    let seriesId, madplayUrl = '';
+    let videoSources = [];
+    let videoUrl = null;
+
     if (type === 'tv') {
       const parts = id.split('/');
       seriesId = parts[0];
@@ -25,101 +65,33 @@ app.get('/watch', async (req, res) => {
         seasonNumber = parts[1];
         episodeNumber = parts[2];
       }
-      try {
-        const sonixUrl = `https://sonix-movies.vercel.app/api/tv/download?id=${seriesId}&season=${seasonNumber || 1}&episode=${episodeNumber || 1}`;
-        console.log(`[WATCH] Sonix API Request: ${sonixUrl}`);
-        sonixRes = await axios.get(sonixUrl);
-        console.log(`[WATCH] Sonix API Response:`, JSON.stringify(sonixRes.data).substring(0, 500) + '...');
-        sonixStreams = sonixRes.data.streams || [];
-      } catch (err) {
-        console.log(`[WATCH] Sonix API failed: ${err.message}`);
-      }
+      madplayUrl = `https://madplay.site/api/playsrc?id=${seriesId}&season=${seasonNumber || 1}&episode=${episodeNumber || 1}`;
     } else {
-      const sonixId = id || '1233413';
-      try {
-        const sonixUrl = `https://sonix-movies.vercel.app/api/movies/download?id=${sonixId}`;
-        console.log(`[WATCH] Sonix API Request: ${sonixUrl}`);
-        sonixRes = await axios.get(sonixUrl);
-        console.log(`[WATCH] Sonix API Response:`, JSON.stringify(sonixRes.data).substring(0, 500) + '...');
-        sonixStreams = sonixRes.data.streams || [];
-      } catch (err) {
-        console.log(`[WATCH] Sonix API failed: ${err.message}`);
-      }
+      const madplayId = id || '811941';
+      madplayUrl = `https://madplay.site/api/playsrc?id=${madplayId}`;
     }
 
-    // Map qualities from Sonix API response
-    let videoSources = sonixStreams.map(stream => ({
-      url: stream.url,
-      label: stream.resolutions || stream.label || stream.quality || stream.format || 'Auto',
-      type: stream.format && stream.format.toLowerCase() === 'mp4' ? 'mp4'
-           : (stream.url && stream.url.includes('.m3u8') ? 'hls' : (stream.format || 'mp4')),
-      size: stream.size,
-      duration: stream.duration,
-      codecName: stream.codecName,
-    }));
-
-    // Pick the highest resolution stream (last in array, or first)
-    const mainStream = sonixStreams[sonixStreams.length - 1] || sonixStreams[0];
-    let videoUrl = mainStream?.url;
-
-    // --- Fallback to /movies/download3 or /tv/download if no videoUrl ---
-    if (!videoUrl) {
-      try {
-        if (type === 'movie') {
-          const fallbackUrl = `https://sonix-movies.vercel.app/api/movies/download3?id=${id}`;
-          console.log(`[WATCH] Fallback Sonix API Request: ${fallbackUrl}`);
-          const fallbackRes = await axios.get(fallbackUrl);
-          const fallbackStreams = fallbackRes.data.streams || [];
-          if (fallbackStreams.length) {
-            videoSources = fallbackStreams.map(stream => ({
-              url: stream.url,
-              label: stream.quality || stream.format || 'Auto',
-              type: stream.format && stream.format.toLowerCase() === 'mp4' ? 'mp4'
-                   : (stream.url && stream.url.includes('.m3u8') ? 'hls' : (stream.format || 'mp4')),
-              size: stream.size,
-            }));
-            videoUrl = fallbackStreams[fallbackStreams.length - 1]?.url || fallbackStreams[0]?.url;
-          }
-        } else if (type === 'tv' && seriesId && seasonNumber && episodeNumber) {
-          const fallbackUrl = `https://sonix-movies.vercel.app/api/tv/downloa?id=${seriesId}&season=${seasonNumber}&episode=${episodeNumber}`;
-          console.log(`[WATCH] Fallback Sonix TV API Request: ${fallbackUrl}`);
-          const fallbackRes = await axios.get(fallbackUrl);
-          const fallbackStreams = fallbackRes.data.streams || [];
-          if (fallbackStreams.length) {
-            videoSources = fallbackStreams.map(stream => ({
-              url: stream.url,
-              label: stream.quality || stream.format || 'Auto',
-              type: stream.format && stream.format.toLowerCase() === 'mp4' ? 'mp4'
-                   : (stream.url && stream.url.includes('.m3u8') ? 'hls' : (stream.format || 'mp4')),
-              size: stream.size,
-            }));
-            videoUrl = fallbackStreams[fallbackStreams.length - 1]?.url || fallbackStreams[0]?.url;
-          }
+    // Fetch Madplay (Alpha)
+    try {
+      console.log(`[WATCH] Madplay API Request: ${madplayUrl}`);
+      madplayRes = await axios.get(madplayUrl);
+      madplayStreams = Array.isArray(madplayRes.data) ? madplayRes.data : [];
+      console.log(`[WATCH] Madplay API Response:`, JSON.stringify(madplayRes.data).substring(0, 500) + '...');
+      if (madplayStreams.length && madplayStreams[0].file) {
+        // Proxy HLS for CORS
+        let fileUrl = madplayStreams[0].file;
+        if (fileUrl.includes('.m3u8')) {
+          fileUrl = `https://hls.server.arlen.icu/m3u8-proxy?url=${encodeURIComponent(fileUrl)}`;
         }
-      } catch (e) {
-        console.log(`[WATCH] Fallback Sonix-movies fallback failed`);
-      }
-    }
-
-    // --- Fallback to HLS passthrough if still no videoUrl ---
-    if (!videoUrl) {
-      try {
-        const encodedId = encodeURIComponent(id);
-        const destination = `https://tom.autoembed.cc/api/getVideoSource?type=${type}&id=${encodedId}`;
-        const passthroughUrl = `https://pass-through.arlen.icu/?destination=${encodeURIComponent(destination)}`;
-        const response = await axios.get(passthroughUrl, {
-          headers: {
-            'x-origin': 'https://tom.autoembed.cc',
-            'x-referer': 'https://tom.autoembed.cc'
-          }
+        videoSources.push({
+          url: fileUrl,
+          label: 'Alpha',
+          type: madplayStreams[0].file.includes('.m3u8') ? 'hls' : 'mp4',
         });
-        videoUrl = response.data.videoSource;
-        if (videoUrl) {
-          videoSources = [{ url: videoUrl, label: 'Auto', type: 'mp4' }];
-        }
-      } catch (e) {
-        console.log(`[WATCH] HLS passthrough fallback failed`);
+        videoUrl = fileUrl;
       }
+    } catch (err) {
+      console.log(`[WATCH] Madplay API failed: ${err.message}`);
     }
 
     // Get title as before
@@ -134,18 +106,8 @@ app.get('/watch', async (req, res) => {
         seasonNumber = parts[1];
         episodeNumber = parts[2];
       }
-      // Get IMDb ID for the series
-      const externalRes = await axios.get(`https://api.themoviedb.org/3/tv/${seriesId}/external_ids?api_key=1e2d76e7c45818ed61645cb647981e5c`);
-      imdbId = externalRes.data.imdb_id;
-      // Get episode title if possible
-      if (seasonNumber && episodeNumber) {
-        const epRes = await axios.get(`https://api.themoviedb.org/3/tv/${seriesId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=1e2d76e7c45818ed61645cb647981e5c&language=en-US`);
-        const showRes = await axios.get(`https://api.themoviedb.org/3/tv/${seriesId}?api_key=1e2d76e7c45818ed61645cb647981e5c&language=en-US`);
-        title = `${showRes.data.name || 'Series'} - S${seasonNumber}E${episodeNumber}: ${epRes.data.name || 'Episode'}`;
-      } else {
-        const showRes = await axios.get(`https://api.themoviedb.org/3/tv/${seriesId}?api_key=1e2d76e7c45818ed61645cb647981e5c&language=en-US`);
-        title = showRes.data.name || 'Untitled';
-      }
+      imdbId = await getImdbIdFromTmdbTv(seriesId);
+      title = await getTvTitle(seriesId, seasonNumber, episodeNumber);
     }
 
     // Fetch subtitles from wyzie.ru
@@ -164,53 +126,14 @@ app.get('/watch', async (req, res) => {
       console.warn(`[SUBTITLES] No IMDb ID found, skipping subtitle fetch.`);
     }
 
-    // If you want to keep your old fallback, you can check if sonixVideoUrl exists
-    if (!videoUrl) {
-      const encodedId = encodeURIComponent(id);
-      const destination = `https://tom.autoembed.cc/api/getVideoSource?type=${type}&id=${encodedId}`;
-      const passthroughUrl = `https://pass-through.arlen.icu/?destination=${encodeURIComponent(destination)}`;
-      const response = await axios.get(passthroughUrl, {
-        headers: {
-          'x-origin': 'https://tom.autoembed.cc',
-          'x-referer': 'https://tom.autoembed.cc'
-        }
-      });
-      videoUrl = response.data.videoSource;
-    }
-
-    // Merge Sonix and Wyzie subtitles (if any)
-    let allSubtitles = [];
-    if (mainStream?.subtitles && Array.isArray(mainStream.subtitles)) {
-      allSubtitles = mainStream.subtitles.map(sub => ({
-        url: sub.url,
-        lan: sub.lan || sub.language || '',
-        lanName: sub.lanName || sub.display || '',
-        flagUrl: sub.flagUrl || '',
-        isHearingImpaired: sub.isHearingImpaired || false,
-        source: 'sonix'
-      }));
-    }
-    if (wyzieSubtitles.length) {
-      allSubtitles = allSubtitles.concat(
-        wyzieSubtitles.map(sub => ({
-          url: sub.url,
-          lan: sub.language,
-          lanName: sub.display,
-          flagUrl: sub.flagUrl,
-          isHearingImpaired: sub.isHearingImpaired,
-          source: 'wyzie'
-        }))
-      );
-    }
-
     // Log outgoing response
     console.log(`[WATCH] Render player with videoUrl: ${videoUrl}, title: ${title}`);
     res.render("player", {
       videoUrl,
-      videoSources: videoSources.length ? videoSources : [{url: videoUrl, label: 'Auto', type: 'mp4'}],
+      videoSources: videoSources.length ? videoSources : [{url: videoUrl, label: 'Alpha', type: 'mp4'}],
       title,
       subtitleUrl: '',
-      wyzieSubtitles, // pass subtitles to the view
+      wyzieSubtitles,
       tmdbId: id,
     });
 
@@ -220,58 +143,6 @@ app.get('/watch', async (req, res) => {
   } catch (err) {
     console.error(`[WATCH] Error:`, err.message);
     res.status(500).send('Failed to fetch video source.');
-  }
-});
-
-const tmdbApiKey = '1e2d76e7c45818ed61645cb647981e5c'; // Replace with your TMDB API key
-
-// Get IMDb ID from TMDB ID
-async function getImdbIdFromTmdb(tmdbId) {
-  try {
-    const tmdbUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${tmdbApiKey}`;
-    const tmdbRes = await axios.get(tmdbUrl);
-    return tmdbRes.data.imdb_id;
-  } catch (e) {
-    return null;
-  }
-}
-
-// Subtitle API endpoint
-app.get('/subtitles', async (req, res) => {
-  const { tmdb } = req.query;
-  if (!tmdb) return res.json([]);
-  const imdbId = await getImdbIdFromTmdb(tmdb);
-  if (!imdbId) return res.json([]);
-  try {
-    const subRes = await axios.get(`https://sub.wyzie.ru/search?id=${imdbId}&encoding=utf-8&format=srt&source=all`);
-    res.json(subRes.data);
-  } catch (e) {
-    res.json([]);
-  }
-});
-
-// Improved proxy for subtitle files with fast streaming and caching headers
-app.get('/proxy-subtitle', async (req, res) => {
-  const url = req.query.url;
-  if (!url || !/^https?:\/\//.test(url)) return res.status(400).send('Invalid URL');
-  try {
-    // Set cache headers for faster repeat loads
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.set('Access-Control-Allow-Origin', '*');
-    // Add a User-Agent header to mimic a browser
-    const response = await axios.get(url, {
-      responseType: 'stream',
-      timeout: 10000,
-      headers: {
-        'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
-        'Accept': 'text/vtt, text/plain, */*'
-      }
-    });
-    res.set('Content-Type', response.headers['content-type'] || 'text/vtt');
-    response.data.pipe(res);
-  } catch (e) {
-    console.error('[PROXY SUBTITLE ERROR]', e.message, url);
-    res.status(500).send('Failed to fetch subtitle');
   }
 });
 
