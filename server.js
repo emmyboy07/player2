@@ -78,11 +78,7 @@ app.get('/watch', async (req, res) => {
       madplayStreams = Array.isArray(madplayRes.data) ? madplayRes.data : [];
       console.log(`[WATCH] Madplay API Response:`, JSON.stringify(madplayRes.data).substring(0, 500) + '...');
       if (madplayStreams.length && madplayStreams[0].file) {
-        // Proxy HLS for CORS
         let fileUrl = madplayStreams[0].file;
-        if (fileUrl.includes('.m3u8')) {
-          fileUrl = `https://hls.server.arlen.icu/m3u8-proxy?url=${encodeURIComponent(fileUrl)}`;
-        }
         videoSources.push({
           url: fileUrl,
           label: 'Alpha',
