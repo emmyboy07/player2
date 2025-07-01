@@ -163,10 +163,10 @@ app.get('/proxy/hls', async (req, res) => {
   const { url: targetUrl } = req.query;
   if (!targetUrl) return res.status(400).send('Missing url parameter');
 
-  // If the url is a relative path, prepend the madplay host
   let fetchUrl = targetUrl;
   if (fetchUrl.startsWith('/')) {
-    fetchUrl = 'https://madplay.site/api/playsrc/hls?url=' + encodeURIComponent(fetchUrl);
+    // Do NOT encode again, just append as-is
+    fetchUrl = 'https://madplay.site/api/playsrc/hls?url=' + fetchUrl;
   }
 
   try {
