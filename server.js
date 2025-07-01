@@ -172,7 +172,18 @@ app.get('/proxy/hls', async (req, res) => {
       }
     });
 
-    res.set(response.headers);
+    // Set CORS headers for browser access
+    res.setHeader('Access-Control-Allow-Origin', 'https://player2-dled.onrender.com'); // or '*' for testing
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, Accept, Origin');
+
+    // Forward other headers except for CORS
+    Object.entries(response.headers).forEach(([key, value]) => {
+      if (!/^access-control-/i.test(key)) {
+        res.setHeader(key, value);
+      }
+    });
+
     response.data.pipe(res);
   } catch (err) {
     console.error(`[PROXY HLS] Error:`, err.message);
