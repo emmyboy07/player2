@@ -392,8 +392,18 @@
     </div>
   </div>
   <script>
+        let hls = null;
+    // --- Proxy HLS URLs to avoid CORS issues ---
+    function getProxiedUrl(url) {
+      if (/\.m3u8($|\?)/i.test(url) && !url.startsWith('/proxy/hls')) {
+        return "/proxy/hls?url=" + encodeURIComponent(url);
+      }
+      return url;
+    }
+
     const video = document.getElementById('video');
-    const videoSrc = "<%= videoUrl %>";
+    // Use proxied URL for initial videoSrc
+    let videoSrc = getProxiedUrl("<%= videoUrl %>");
     const playPause = document.getElementById('center-play');
     const seekBack = document.getElementById('seek-back');
     const seekForward = document.getElementById('seek-forward');
@@ -501,10 +511,10 @@ subtitleSelectorPopup.addEventListener('change', function() {
     video.addEventListener('waiting', showSpinner);
     video.addEventListener('seeking', showSpinner);
 
-    // HLS setup
+    // --- HLS setup (initial load) ---
     if (/\.m3u8($|\?)/i.test(videoSrc)) {
       if (Hls.isSupported()) {
-        const hls = new Hls();
+        hls = new Hls(); // just assign, do not redeclare
         hls.loadSource(videoSrc);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, function() {
@@ -517,7 +527,6 @@ subtitleSelectorPopup.addEventListener('change', function() {
         alert("Your browser does not support HLS playback.");
       }
     } else {
-      // For direct MP4 or other supported formats
       video.src = videoSrc;
       video.addEventListener('loadedmetadata', () => video.play().catch(()=>{}));
     }
@@ -661,7 +670,6 @@ subtitleSelectorPopup.addEventListener('change', function() {
     // You must pass this as videoSources from your backend
     const videoSources = <%- JSON.stringify(videoSources) %>;
     let currentSourceIndex = 0;
-    let hls = null;
 
     // --- Quality Selector Logic ---
 
@@ -704,10 +712,11 @@ subtitleSelectorPopup.addEventListener('change', function() {
 
       // Switch source
       const src = videoSources[newIndex];
-      if (/\.m3u8($|\?)/i.test(src.url)) {
+      const url = getProxiedUrl(src.url);
+      if (/\.m3u8($|\?)/i.test(url)) {
         if (Hls.isSupported()) {
-          hls = new Hls();
-          hls.loadSource(src.url);
+          hls = new Hls(); // just assign, do not redeclare
+          hls.loadSource(url);
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, function () {
             video.currentTime = prevTime;
@@ -715,7 +724,7 @@ subtitleSelectorPopup.addEventListener('change', function() {
             if (!wasPaused) video.play().catch(() => {});
           });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = src.url;
+          video.src = url;
           video.addEventListener('loadedmetadata', function handler() {
             video.removeEventListener('loadedmetadata', handler);
             video.currentTime = prevTime;
@@ -726,7 +735,7 @@ subtitleSelectorPopup.addEventListener('change', function() {
           alert("Your browser does not support HLS playback.");
         }
       } else {
-        video.src = src.url;
+        video.src = url;
         video.addEventListener('loadedmetadata', function handler() {
           video.removeEventListener('loadedmetadata', handler);
           video.currentTime = prevTime;
