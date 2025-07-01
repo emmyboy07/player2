@@ -395,6 +395,11 @@
         let hls = null;
     // --- Proxy HLS URLs to avoid CORS issues ---
     function getProxiedUrl(url) {
+      // If url is a full madplay.site/api/playsrc/hls?url=... link, extract the ?url= part
+      const madplayHlsMatch = url.match(/^https?:\/\/madplay\.site\/api\/playsrc\/hls\?url=([^&]+)/);
+      if (madplayHlsMatch) {
+        return "/proxy/hls?url=" + encodeURIComponent(decodeURIComponent(madplayHlsMatch[1]));
+      }
       if (/\.m3u8($|\?)/i.test(url) && !url.startsWith('/proxy/hls')) {
         return "/proxy/hls?url=" + encodeURIComponent(url);
       }
