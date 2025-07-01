@@ -74,7 +74,17 @@ app.get('/watch', async (req, res) => {
     // Fetch Madplay (Alpha)
     try {
       console.log(`[WATCH] Madplay API Request: ${madplayUrl}`);
-      madplayRes = await axios.get(madplayUrl);
+      madplayRes = await axios.get(madplayUrl, {
+        headers: {
+          'origin': 'https://uembed.site',
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+          'accept': '*/*',
+          'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+          'cache-control': 'no-cache',
+          'pragma': 'no-cache',
+          // You can add more headers if needed
+        }
+      });
       madplayStreams = Array.isArray(madplayRes.data) ? madplayRes.data : [];
       console.log(`[WATCH] Madplay API Response:`, JSON.stringify(madplayRes.data).substring(0, 500) + '...');
       if (madplayStreams.length && madplayStreams[0].file) {
@@ -139,6 +149,34 @@ app.get('/watch', async (req, res) => {
   } catch (err) {
     console.error(`[WATCH] Error:`, err.message);
     res.status(500).send('Failed to fetch video source.');
+  }
+});
+
+// Proxy HLS stream from Madplay
+app.get('/proxy/hls', async (req, res) => {
+  const { url } = req.query;
+  if (!url) {
+    return res.status(400).send('Missing url parameter');
+  }
+
+  try {
+    const response = await axios.get(`https://madplay.site/api/playsrc/hls?url=${encodeURIComponent(url)}`, {
+      responseType: 'stream',
+      headers: {
+        'origin': 'https://uembed.site',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+        'accept': '*/*',
+        'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+        'cache-control': 'no-cache',
+        'pragma': 'no-cache',
+      }
+    });
+
+    res.set(response.headers);
+    response.data.pipe(res);
+  } catch (err) {
+    console.error(`[PROXY HLS] Error:`, err.message);
+    res.status(500).send('Failed to proxy HLS stream.');
   }
 });
 
