@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
+const url = require('url');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -89,10 +90,15 @@ app.get('/watch', async (req, res) => {
       console.log(`[WATCH] Madplay API Response:`, JSON.stringify(madplayRes.data).substring(0, 500) + '...');
       if (madplayStreams.length && madplayStreams[0].file) {
         let fileUrl = madplayStreams[0].file;
+        // If fileUrl is a madplay.site/api/playsrc/hls?url=... link, extract the ?url= part
+        const match = fileUrl.match(/^https?:\/\/madplay\.site\/api\/playsrc\/hls\?url=([^&]+)/);
+        if (match) {
+          fileUrl = decodeURIComponent(match[1]);
+        }
         videoSources.push({
           url: fileUrl,
           label: 'Alpha',
-          type: madplayStreams[0].file.includes('.m3u8') ? 'hls' : 'mp4',
+          type: fileUrl.includes('.m3u8') ? 'hls' : 'mp4',
         });
         videoUrl = fileUrl;
       }
@@ -154,14 +160,12 @@ app.get('/watch', async (req, res) => {
 
 // Proxy HLS stream from Madplay
 app.get('/proxy/hls', async (req, res) => {
-  const { url } = req.query;
-  if (!url) {
-    return res.status(400).send('Missing url parameter');
-  }
+  const { url: targetUrl } = req.query;
+  if (!targetUrl) return res.status(400).send('Missing url parameter');
 
   try {
-    const response = await axios.get(`https://madplay.site/api/playsrc/hls?url=${encodeURIComponent(url)}`, {
-      responseType: 'stream',
+    const response = await axios.get(targetUrl, {
+      responseType: 'arraybuffer',
       headers: {
         'origin': 'https://uembed.site',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
@@ -172,21 +176,33 @@ app.get('/proxy/hls', async (req, res) => {
       }
     });
 
-    // Set CORS headers for browser access
-    res.setHeader('Access-Control-Allow-Origin', 'https://player2-dled.onrender.com'); // or '*' for testing
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, Accept, Origin');
-
-    // Forward other headers except for CORS
-    Object.entries(response.headers).forEach(([key, value]) => {
-      if (!/^access-control-/i.test(key)) {
-        res.setHeader(key, value);
-      }
-    });
-
-    response.data.pipe(res);
+    // Check if it's a playlist
+    const contentType = response.headers['content-type'];
+    if (contentType && contentType.includes('application/vnd.apple.mpegurl') || targetUrl.endsWith('.m3u8')) {
+      let playlist = response.data.toString('utf8');
+      // Rewrite all URLs in the playlist to go through the proxy
+      playlist = playlist.replace(
+        /^(?!#)(.+)$/gm,
+        (line) => {
+          // Ignore comments and empty lines
+          if (line.startsWith('#') || !line.trim()) return line;
+          // Resolve relative URLs
+          const resolved = url.resolve(targetUrl, line.trim());
+          return `/proxy/hls?url=${encodeURIComponent(resolved)}`;
+        }
+      );
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.send(playlist);
+    } else {
+      // For segments, just pipe as before
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      Object.entries(response.headers).forEach(([key, value]) => {
+        if (!/^access-control-/i.test(key)) res.setHeader(key, value);
+      });
+      res.send(Buffer.from(response.data));
+    }
   } catch (err) {
-    console.error(`[PROXY HLS] Error:`, err.message);
     res.status(500).send('Failed to proxy HLS stream.');
   }
 });
